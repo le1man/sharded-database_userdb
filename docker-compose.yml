@@ -9,10 +9,11 @@ services:
       - shards:/app/shards
     restart: always
     healthcheck:
-      test: ["CMD", "nc", "-z", "/tmp/user_db.sock"]
+      test: ["CMD-SHELL", "test -S /tmp/user_db.sock"]
       interval: 5s
       timeout: 2s
-      retries: 5
+      retries: 10
+      start_period: 10s
 
   fastapi:
     build: ./fastapi_app
