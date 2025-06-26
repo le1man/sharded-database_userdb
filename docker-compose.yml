@@ -1,0 +1,34 @@
+version: '3.9'
+services:
+  db_service:
+    build: ./db_service
+    environment:
+      - USER_DB_PATH=/tmp/user_db.sock
+    volumes:
+      - userdb-socket:/tmp
+      - shards:/app/shards
+    restart: always
+    healthcheck:
+      test: ["CMD", "nc", "-z", "/tmp/user_db.sock"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  fastapi:
+    build: ./fastapi_app
+    ports:
+      - "1818:1818"
+    environment:
+      - ADMIN_LOGIN=${ADMIN_LOGIN}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - USER_DB_PATH=/tmp/user_db.sock
+    volumes:
+      - userdb-socket:/tmp
+    depends_on:
+      db_service:
+        condition: service_healthy
+    restart: always
+
+volumes:
+  userdb-socket:
+  shards:

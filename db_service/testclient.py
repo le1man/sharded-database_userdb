@@ -5,6 +5,7 @@ import os
 # Path to UNIX-socket
 SOCKET_PATH = os.getenv("USER_DB_PATH", "/tmp/user_db.sock")
 
+
 async def run_tests():
     reader, writer = await asyncio.open_unix_connection(SOCKET_PATH)
 
@@ -73,6 +74,7 @@ async def run_tests():
 
     writer.close()
     await writer.wait_closed()
+
 
 if __name__ == "__main__":
     asyncio.run(run_tests())

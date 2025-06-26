@@ -10,6 +10,7 @@ logging.basicConfig(level=logging.INFO,
 
 SOCKET_PATH = os.getenv("USER_DB_PATH", "/tmp/user_db.sock")
 
+
 async def handle_client(reader: asyncio.StreamReader,
                         writer: asyncio.StreamWriter,
                         manager: ShardManager):
@@ -40,21 +41,21 @@ async def handle_client(reader: asyncio.StreamReader,
                         writer.write(f"OK {json.dumps(rec)}\n".encode())
 
                 elif req.startswith("DELETE "):
-                    ref = req.split(" ",1)[1]
+                    ref = req.split(" ", 1)[1]
                     ok = await manager.delete_record(ref)
-                    writer.write(( "OK Deleted\n" if ok else f"ERROR Delete failed\n").encode())
+                    writer.write(("OK Deleted\n" if ok else f"ERROR Delete failed\n").encode())
 
                 elif req.startswith("UPDATE "):
-                    parts = req.split(" ",2)
+                    parts = req.split(" ", 2)
                     ref = parts[1]
-                    upd = dict(pair.split("=",1) for pair in parts[2].split())
+                    upd = dict(pair.split("=", 1) for pair in parts[2].split())
                     ok = await manager.update_record(ref, upd)
-                    writer.write(( "OK Updated\n" if ok else f"ERROR Update failed\n").encode())
+                    writer.write(("OK Updated\n" if ok else f"ERROR Update failed\n").encode())
 
                 elif req.startswith("FIND "):
-                    parts = req.split(" ",3)
+                    parts = req.split(" ", 3)
                     field, value = parts[1], parts[2]
-                    fields = parts[3].split(',') if len(parts)==4 else None
+                    fields = parts[3].split(',') if len(parts) == 4 else None
                     recs = await manager.find_records(field, value, fields)
                     writer.write(f"OK {json.dumps(recs)}\n".encode())
 
@@ -70,6 +71,7 @@ async def handle_client(reader: asyncio.StreamReader,
         await writer.wait_closed()
         logging.info(f"Connection closed: {addr}")
 
+
 async def start_server():
     if os.path.exists(SOCKET_PATH):
         os.remove(SOCKET_PATH)
@@ -82,6 +84,7 @@ async def start_server():
     logging.info(f"Server listening on {SOCKET_PATH}")
     async with server:
         await server.serve_forever()
+
 
 if __name__ == "__main__":
     try:

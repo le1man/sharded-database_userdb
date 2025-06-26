@@ -17,6 +17,7 @@ if not ADMIN_LOGIN or not ADMIN_PASSWORD:
 app = FastAPI(title="UserDB Proxy API")
 security = HTTPBasic()
 
+
 def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
     correct_user = credentials.username == ADMIN_LOGIN
     correct_pass = credentials.password == ADMIN_PASSWORD
@@ -27,6 +28,7 @@ def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
             headers={"WWW-Authenticate": "Basic"},
         )
 
+
 # --- Pydantic-models ---
 class CreateRequest(BaseModel):
     username: str
@@ -35,6 +37,7 @@ class CreateRequest(BaseModel):
     last_logged: str
     last_ip: str
 
+
 class UpdateRequest(BaseModel):
     # any of the fields except id
     username: str | None = None
@@ -42,6 +45,7 @@ class UpdateRequest(BaseModel):
     ip_reg: str | None = None
     last_logged: str | None = None
     last_ip: str | None = None
+
 
 # --- Helper function for communicating with a UNIX socket ---
 async def send_cmd(cmd: str) -> str:
@@ -67,6 +71,7 @@ async def send_cmd(cmd: str) -> str:
         # ERROR ...
         raise HTTPException(status_code=400, detail=text)
 
+
 # --- endpoints ---
 
 @app.post("/records", dependencies=[Depends(verify_credentials)])
@@ -76,13 +81,14 @@ async def create_record(req: CreateRequest):
     # res == "<ref>"
     return {"ref": res}
 
+
 @app.get("/records/{ref}", dependencies=[Depends(verify_credentials)])
 async def get_record(
-    ref: str = Path(..., description="Reference, e.g. a0:3"),
-    fields: str | None = Query(
-        None,
-        description="Comma-separated list of fields to return, e.g. username,last_ip"
-    )
+        ref: str = Path(..., description="Reference, e.g. a0:3"),
+        fields: str | None = Query(
+            None,
+            description="Comma-separated list of fields to return, e.g. username,last_ip"
+        )
 ):
     if fields:
         cmd = f"GET {ref} {fields}"
@@ -92,10 +98,11 @@ async def get_record(
     # res == JSON-string with object
     return json.loads(res)
 
+
 @app.put("/records/{ref}", dependencies=[Depends(verify_credentials)])
 async def update_record(
-    ref: str = Path(..., description="Reference, e.g. a0:3"),
-    req: UpdateRequest = Depends()
+        ref: str = Path(..., description="Reference, e.g. a0:3"),
+        req: UpdateRequest = Depends()
 ):
     pairs = []
     for k, v in req.dict().items():
@@ -107,20 +114,22 @@ async def update_record(
     res = await send_cmd(cmd)  # "Updated"
     return {"status": res}
 
+
 @app.delete("/records/{ref}", dependencies=[Depends(verify_credentials)])
 async def delete_record(ref: str = Path(..., description="Reference, e.g. a0:3")):
     cmd = f"DELETE {ref}"
     res = await send_cmd(cmd)  # "Deleted"
     return {"status": res}
 
+
 @app.get("/find", dependencies=[Depends(verify_credentials)])
 async def find_records(
-    field: str = Query(..., description="Поле для поиска, например username"),
-    value: str = Query(..., description="Значение поля"),
-    fields: str | None = Query(
-        None,
-        description="Комма-сепарейтед список полей для вывода"
-    )
+        field: str = Query(..., description="Поле для поиска, например username"),
+        value: str = Query(..., description="Значение поля"),
+        fields: str | None = Query(
+            None,
+            description="Комма-сепарейтед список полей для вывода"
+        )
 ):
     if fields:
         cmd = f"FIND {field} {value} {fields}"
