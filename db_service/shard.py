@@ -108,49 +108,6 @@ class ShardManager:
         os.replace(tmp, path)
         os.chmod(path, 0o644)
 
-    async def _remove_expired_records(self):
-        now = int(time.time())
-        to_remove = []
-        async with self.cache_lock:
-            for ref, rec in list(self.cache.items()):
-                if rec.timestamp < now - TTL_SECONDS:
-                    to_remove.append((ref, rec))
-        if not to_remove:
-            return
-
-        for ref, rec in to_remove:
-            try:
-                shard, record_id = self._validate_ref(ref)
-                prefix, shard_index = shard[:-1], int(shard[-1])
-            except ValueError:
-                continue
-
-            # Remove from data and meta
-            async with self.meta_lock:
-                async with self.data_lock:
-                    data_path = self._get_shard_data_path(prefix, shard_index)
-                    try:
-                        async with aiofiles.open(data_path, 'r+b') as f:
-                            await f.seek(record_id * RECORD_SIZE)
-                            await f.write(b'\x00' * RECORD_SIZE)
-                            await f.flush()
-                    except FileNotFoundError:
-                        continue
-
-                    info = await self._load_info(prefix)
-                    info['free'].setdefault(str(shard_index), []).append(record_id)
-                    info['log'].append((now, f'DELETE {ref} (TTL)'))
-                    # remove from index
-                    for field, value in rec.fields.items():
-                        key = f"{field}:{value}"
-                        if key in info['index']:
-                            if ref in info['index'][key]:
-                                info['index'][key].remove(ref)
-                    info['log'] = info['log'][-LOG_LIMIT:]
-                    await self._save_info(prefix, info)
-
-            async with self.cache_lock:
-                del self.cache[ref]
 
     async def add_record(self, username: str, password_hash: str, ip_reg: str,
                          last_logged: str, last_ip: str) -> str:
@@ -170,7 +127,6 @@ class ShardManager:
                 raise ValueError(f"{k} too long")
 
         prefix = self._sanitize_shard_prefix(cleaned['username'])
-        await self._remove_expired_records()
 
         now = int(time.time())
         async with self.meta_lock:
@@ -232,7 +188,6 @@ class ShardManager:
         return ref
 
     async def get_record(self, ref: str, fields: Optional[List[str]] = None) -> Optional[Dict[str, str]]:
-        await self._remove_expired_records()
         async with self.cache_lock:
             if ref in self.cache:
                 rec = self.cache[ref]
@@ -265,7 +220,6 @@ class ShardManager:
         return {k: rec[k] for k in (fields or FIELDS)}
 
     async def delete_record(self, ref: str) -> bool:
-        await self._remove_expired_records()
         try:
             shard, record_id = self._validate_ref(ref)
             prefix, shard_index = shard[:-1], int(shard[-1])
@@ -307,7 +261,6 @@ class ShardManager:
         return True
 
     async def update_record(self, ref: str, updates: Dict[str, str]) -> bool:
-        await self._remove_expired_records()
         old = await self.get_record(ref)
         if not old:
             return False
@@ -380,7 +333,6 @@ class ShardManager:
         if field not in FIELDS:
             raise ValueError(f"Invalid field: {field}")
 
-        await self._remove_expired_records()
         key = f"{field}:{value}"
         async with self.meta_lock:
             info = await self._load_info(self._sanitize_shard_prefix(value))
