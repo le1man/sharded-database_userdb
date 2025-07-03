@@ -57,12 +57,15 @@ class ShardManager:
         except ValueError:
             raise ValueError(f"Invalid reference format: {ref}")
 
+    
     def _get_shard_info_path(self, prefix: str) -> str:
         return os.path.join(self.base_path, f'{prefix}.info')
 
+    
     def _get_shard_data_path(self, prefix: str, index: int) -> str:
         return os.path.join(self.base_path, f'{prefix}{index}')
 
+    
     async def _load_info(self, prefix: str) -> Dict:
         path = self._get_shard_info_path(prefix)
         if not os.path.exists(path):
@@ -91,6 +94,7 @@ class ShardManager:
             'index': data.get('index', {})
         }
 
+    
     async def _save_info(self, prefix: str, info: Dict):
         path = self._get_shard_info_path(prefix)
         tmp = path + '.tmp'
@@ -107,6 +111,34 @@ class ShardManager:
         # Atomic replace
         os.replace(tmp, path)
         os.chmod(path, 0o644)
+
+
+    async def _cleanup_index_ttl(self, prefix: str):
+        now = int(time.time())
+        info = await self._load_info(prefix)
+        index = info.get('index', {})
+        updated = False
+    
+        async with self.cache_lock:
+            valid_refs = {
+                ref for ref, rec in self.cache.items()
+                if rec.timestamp >= now - TTL_SECONDS
+            }
+    
+        # Удалим только ref'ы, которые давно не использовались
+        for key in list(index.keys()):
+            refs = index[key]
+            original_len = len(refs)
+            index[key] = [ref for ref in refs if ref in valid_refs]
+            if len(index[key]) < original_len:
+                updated = True
+    
+        if updated:
+            info['index'] = index
+            info['log'].append((now, f'CLEAN TTL INDEX'))
+            info['log'] = info['log'][-LOG_LIMIT:]
+            await self._save_info(prefix, info)
+            logger.info(f"TTL index cleanup done for prefix '{prefix}'")
 
 
     async def add_record(self, username: str, password_hash: str, ip_reg: str,
@@ -178,6 +210,7 @@ class ShardManager:
                     key = f"{k}:{v}"
                     info['index'].setdefault(key, []).append(ref)
 
+                await self._cleanup_index_ttl(prefix)
                 await self._save_info(prefix, info)
 
         # Update cache
@@ -209,6 +242,8 @@ class ShardManager:
         if len(raw) != RECORD_SIZE:
             return None
 
+        await self._cleanup_index_ttl(prefix)
+        
         parts = raw.split(FIELD_SEPARATOR)
         if len(parts) != len(FIELDS):
             return None
@@ -231,6 +266,8 @@ class ShardManager:
         old = await self.get_record(ref)
         if not old:
             return False
+
+        await self._cleanup_index_ttl(prefix)
 
         async with self.meta_lock:
             async with self.data_lock:
@@ -264,6 +301,8 @@ class ShardManager:
         old = await self.get_record(ref)
         if not old:
             return False
+
+        await self._cleanup_index_ttl(prefix)
 
         # We trim and clean
         cleaned = {}
@@ -338,6 +377,8 @@ class ShardManager:
             info = await self._load_info(self._sanitize_shard_prefix(value))
             refs = info.get('index', {}).get(key, []).copy()
 
+        await self._cleanup_index_ttl(prefix)
+                               
         results = []
         for ref in refs:
             rec = await self.get_record(ref, fields)
