@@ -210,7 +210,6 @@ class ShardManager:
                     key = f"{k}:{v}"
                     info['index'].setdefault(key, []).append(ref)
 
-                await self._cleanup_index_ttl(prefix)
                 await self._save_info(prefix, info)
 
         # Update cache
@@ -241,8 +240,6 @@ class ShardManager:
             raw = await f.read(RECORD_SIZE)
         if len(raw) != RECORD_SIZE:
             return None
-
-        await self._cleanup_index_ttl(prefix)
         
         parts = raw.split(FIELD_SEPARATOR)
         if len(parts) != len(FIELDS):
@@ -266,8 +263,6 @@ class ShardManager:
         old = await self.get_record(ref)
         if not old:
             return False
-
-        await self._cleanup_index_ttl(prefix)
 
         async with self.meta_lock:
             async with self.data_lock:
@@ -301,9 +296,7 @@ class ShardManager:
         old = await self.get_record(ref)
         if not old:
             return False
-
-        await self._cleanup_index_ttl(prefix)
-
+            
         # We trim and clean
         cleaned = {}
         for k, v in updates.items():
@@ -376,8 +369,6 @@ class ShardManager:
         async with self.meta_lock:
             info = await self._load_info(self._sanitize_shard_prefix(value))
             refs = info.get('index', {}).get(key, []).copy()
-
-        await self._cleanup_index_ttl(prefix)
                                
         results = []
         for ref in refs:
