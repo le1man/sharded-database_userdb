@@ -366,13 +366,16 @@ class ShardManager:
             raise ValueError(f"Invalid field: {field}")
 
         key = f"{field}:{value}"
-        async with self.meta_lock:
-            info = await self._load_info(self._sanitize_shard_prefix(value))
-            refs = info.get('index', {}).get(key, []).copy()
-                               
         results = []
-        for ref in refs:
-            rec = await self.get_record(ref, fields)
-            if rec is not None:
-                results.append({'ref': ref, **rec})
+
+        for name in os.listdir(self.base_path):
+            if not name.endswith('.info'):
+                continue
+            prefix = name[:-5]          # 'a.info' -> 'a'
+            info = await self._load_info(prefix)
+            for ref in info.get('index', {}).get(key, ()):
+                rec = await self.get_record(ref, fields)
+                if rec is not None:
+                    results.append({'ref': ref, **rec})
+    
         return results
